@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Noiseless Keyword Mapping Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3250; --accent: #6c63ff; --accent2: #ff6584;
+    --accent3: #43d9a3; --accent4: #f7c948;
+    --text: #e8eaf0; --muted: #7b82a0;
+    --ep: #ff6584; --pg: #43d9a3; --pi: #f7c948; --fk: #6c63ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 13px; }
+  
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .header h1 span { color: var(--accent); }
+  .kw-count { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted); }
+
+  /* Pillar cards */
+  .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 24px; }
+  .pillar-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all .15s; position: relative; overflow: hidden; }
+  .pillar-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .pillar-card.ep::before { background: var(--ep); }
+  .pillar-card.pg::before { background: var(--pg); }
+  .pillar-card.pi::before { background: var(--pi); }
+  .pillar-card.fk::before { background: var(--fk); }
+  .pillar-card:hover, .pillar-card.active { background: var(--surface2); border-color: var(--accent); }
+  .pillar-card .label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .pillar-card .name { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  .pillar-card .count { font-size: 24px; font-weight: 700; }
+  .pillar-card.ep .count { color: var(--ep); }
+  .pillar-card.pg .count { color: var(--pg); }
+  .pillar-card.pi .count { color: var(--pi); }
+  .pillar-card.fk .count { color: var(--fk); }
+
+  /* Layout */
+  .main { display: grid; grid-template-columns: 260px 1fr; gap: 0; height: calc(100vh - 200px); }
+  
+  /* Filters */
+  .filters { background: var(--surface); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; }
+  .filter-section { margin-bottom: 20px; }
+  .filter-title { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+  
+  input[type="text"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 12px; outline: none; }
+  input[type="text"]:focus { border-color: var(--accent); }
+  
+  .range-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .range-header { display: flex; justify-content: space-between; align-items: center; }
+  .range-row label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+  .range-val { font-size: 13px; font-weight: 700; color: var(--accent); }
+  
+  .checkbox-list { display: flex; flex-direction: column; gap: 6px; }
+  .checkbox-item { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+  .checkbox-item:hover { background: var(--surface2); }
+  .checkbox-item input { accent-color: var(--accent); cursor: pointer; }
+  .checkbox-item span { font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  
+  .btn-reset { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; color: var(--muted); cursor: pointer; font-size: 12px; margin-top: 4px; }
+  .btn-reset:hover { color: var(--text); border-color: var(--accent); }
+
+  /* Content area */
+  .content { display: flex; flex-direction: column; overflow: hidden; }
+  
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 16px; gap: 4px; }
+  .tab { padding: 10px 16px; font-size: 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+
+  /* Table view */
+  .table-wrap { flex: 1; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { position: sticky; top: 0; background: var(--surface); z-index: 10; }
+  th { padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; cursor: pointer; white-space: nowrap; border-bottom: 1px solid var(--border); user-select: none; }
+  th:hover { color: var(--text); }
+  th .sort-icon { margin-left: 4px; opacity: .4; }
+  th.sorted .sort-icon { opacity: 1; color: var(--accent); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:hover td { background: var(--surface2); }
+  
+  .kw-text { font-weight: 500; color: var(--text); }
+  .topic-badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .type-badge { border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+  .type-single { background: rgba(108,99,255,.15); color: #a09bff; border: 1px solid rgba(108,99,255,.3); }
+  .type-multiple { background: rgba(67,217,163,.15); color: #43d9a3; border: 1px solid rgba(67,217,163,.3); }
+  .type-sentence { background: rgba(247,201,72,.15); color: #f7c948; border: 1px solid rgba(247,201,72,.3); }
+  
+  .score-bar { display: flex; align-items: center; gap: 6px; }
+  .bar-bg { background: var(--surface2); border-radius: 3px; height: 5px; flex: 1; min-width: 50px; }
+  .bar-fill { height: 5px; border-radius: 3px; }
+  .score-num { font-size: 11px; color: var(--muted); width: 32px; text-align: right; }
+  
+  .pill-ep { background: rgba(255,101,132,.15); color: var(--ep); border: 1px solid rgba(255,101,132,.3); border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+  .pill-pg { background: rgba(67,217,163,.15); color: var(--pg); border: 1px solid rgba(67,217,163,.3); border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+  .pill-pi { background: rgba(247,201,72,.15); color: var(--pi); border: 1px solid rgba(247,201,72,.3); border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+  .pill-fk { background: rgba(108,99,255,.15); color: var(--fk); border: 1px solid rgba(108,99,255,.3); border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+  
+  .sv-val { font-weight: 600; font-size: 12px; }
+  .trend-up { color: var(--accent3); font-size: 10px; }
+  .trend-down { color: var(--ep); font-size: 10px; }
+  .trend-neutral { color: var(--muted); font-size: 10px; }
+  
+  /* Pagination */
+  .pagination { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+  .page-info { font-size: 11px; color: var(--muted); }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; color: var(--muted); cursor: pointer; font-size: 11px; }
+  .page-btn:hover, .page-btn.active { color: var(--text); border-color: var(--accent); }
+  .page-btn:disabled { opacity: .3; cursor: default; }
+  
+  /* Chart view */
+  .chart-view { flex: 1; display: none; padding: 16px; gap: 14px; overflow-y: auto; overflow-x: hidden; }
+  .chart-view.visible { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: auto; align-content: start; }
+  .chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; height: 460px; overflow: hidden; }
+  .chart-box h3 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 10px; }
+  .chart-box.full { grid-column: 1 / -1; }
+  .canvas-wrap { position: relative; height: 400px; width: 100%; }
+  
+  /* Sweet spot highlight */
+  .sweet { color: var(--accent3); font-weight: 600; }
+  
+  /* Stats bar */
+  .stats-bar { display: flex; gap: 16px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .stat { font-size: 11px; color: var(--muted); }
+  .stat strong { color: var(--text); }
+  
+  .empty { padding: 60px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="mainUI">
+<div class="header">
+  <h1>Noiseless Keyword <span>Mapping</span> Dashboard</h1>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span id="csvStatus" style="font-size:11px;color:var(--muted);">Loading…</span>
+    <span class="kw-count" id="totalCount">—</span>
+    <label id="csvLabel" style="background:var(--accent);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">
+      🔄 Reload
+      <input type="file" accept=".csv" style="display:none" onchange="loadCSV(this.files[0])">
+    </label>
+  </div>
+</div>
+
+<div class="pillars">
+  <div class="pillar-card ep" onclick="togglePillar('Emotional Pain')" id="card-ep">
+    <div class="label">Pillar 01</div>
+    <div class="name">Emotional Pain</div>
+    <div class="count" id="cnt-ep">—</div>
+  </div>
+  <div class="pillar-card pg" onclick="togglePillar('Personal Growth')" id="card-pg">
+    <div class="label">Pillar 02</div>
+    <div class="name">Personal Growth</div>
+    <div class="count" id="cnt-pg">—</div>
+  </div>
+  <div class="pillar-card pi" onclick="togglePillar('Purpose and Identity')" id="card-pi">
+    <div class="label">Pillar 03</div>
+    <div class="name">Purpose & Identity</div>
+    <div class="count" id="cnt-pi">—</div>
+  </div>
+  <div class="pillar-card fk" onclick="togglePillar('Fundamental Knowledge')" id="card-fk">
+    <div class="label">Pillar 04</div>
+    <div class="name">Fundamental Knowledge</div>
+    <div class="count" id="cnt-fk">—</div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Filters -->
+  <div class="filters">
+    <div class="filter-section">
+      <div class="filter-title">Search</div>
+      <input type="text" id="searchInput" placeholder="Filter keywords…" oninput="applyFilters()">
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">Content Pillar</div>
+      <div class="checkbox-list" id="pillarFilters">
+        <label class="checkbox-item"><input type="checkbox" value="Emotional Pain" checked onchange="applyFilters()"><div class="dot" style="background:var(--ep)"></div><span>Emotional Pain</span></label>
+        <label class="checkbox-item"><input type="checkbox" value="Personal Growth" checked onchange="applyFilters()"><div class="dot" style="background:var(--pg)"></div><span>Personal Growth</span></label>
+        <label class="checkbox-item"><input type="checkbox" value="Purpose and Identity" checked onchange="applyFilters()"><div class="dot" style="background:var(--pi)"></div><span>Purpose & Identity</span></label>
+        <label class="checkbox-item"><input type="checkbox" value="Fundamental Knowledge" checked onchange="applyFilters()"><div class="dot" style="background:var(--fk)"></div><span>Fundamental Knowledge</span></label>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">KW Type</div>
+      <div class="checkbox-list">
+        <label class="checkbox-item"><input type="checkbox" value="single word" checked onchange="applyFilters()"><span>Single word</span></label>
+        <label class="checkbox-item"><input type="checkbox" value="multiple words" checked onchange="applyFilters()"><span>Multiple words</span></label>
+        <label class="checkbox-item"><input type="checkbox" value="sentence" checked onchange="applyFilters()"><span>Sentence</span></label>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">Search Volume (min)</div>
+      <div class="range-row">
+        <div class="range-header"><label>Min vol</label><span class="range-val" id="svMinVal">0</span></div>
+        <input type="range" id="svMin" min="0" max="4088093" value="0" step="10000" oninput="updateRange('svMin','svMinVal'); applyFilters()">
+      </div>
+      <div class="range-row">
+        <div class="range-header"><label>Max vol</label><span class="range-val" id="svMaxVal">4.09M</span></div>
+        <input type="range" id="svMax" min="0" max="4088093" value="4088093" step="10000" oninput="updateRange('svMax','svMaxVal'); applyFilters()">
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">Competition (lower = easier)</div>
+      <div class="range-row">
+        <div class="range-header"><label>Max comp</label><span class="range-val" id="compMaxVal">100</span></div>
+        <input type="range" id="compMax" min="0" max="100" value="100" step="1" oninput="updateRange('compMax','compMaxVal'); applyFilters()">
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">Overall Score (min)</div>
+      <div class="range-row">
+        <div class="range-header"><label>Min score</label><span class="range-val" id="overallMinVal">0</span></div>
+        <input type="range" id="overallMin" min="0" max="76" value="0" step="1" oninput="updateRange('overallMin','overallMinVal'); applyFilters()">
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-title">Main Topic</div>
+      <div class="checkbox-list" id="topicFilters"></div>
+    </div>
+
+    <button class="btn-reset" onclick="resetFilters()">↺ Reset all filters</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('table', this)">📋 Table</div>
+      <div class="tab" onclick="showTab('charts', this)">📊 Charts</div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">Showing <strong id="showingCount">—</strong> keywords</div>
+      <div class="stat">Avg volume <strong id="avgVol">—</strong></div>
+      <div class="stat">Avg competition <strong id="avgComp">—</strong></div>
+      <div class="stat">Avg overall <strong id="avgOverall">—</strong></div>
+      <div class="stat">🎯 Sweet spot <strong id="sweetCount" class="sweet">—</strong></div>
+    </div>
+
+    <!-- Table -->
+    <div id="tableView" class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('Keyword')" id="th-Keyword">Keyword <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('Content Pillar')" id="th-Content Pillar">Pillar <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('Main Topic')" id="th-Main Topic">Topic <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('KW Type')" id="th-KW Type">Type <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('Search volume')" id="th-Search volume" class="sorted">Search Vol ↓</th>
+            <th onclick="sortBy('Competition')" id="th-Competition">Competition <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('Overall')" id="th-Overall">Overall <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('30d ago searches')" id="th-30d ago searches">30d Trend <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="empty" id="emptyMsg" style="display:none">No keywords match the current filters.</div>
+    </div>
+
+    <!-- Charts -->
+    <div id="chartsView" class="chart-view">
+      <!-- Row 1: Top 15 Volume | Top 15 Low Competition -->
+      <div class="chart-box">
+        <h3>Top 15 by Search Volume</h3>
+        <div class="canvas-wrap"><canvas id="chartVolume"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>Top 15 Lowest Competition</h3>
+        <div class="canvas-wrap"><canvas id="chartLowComp"></canvas></div>
+      </div>
+      <!-- Row 2: Pillar count | Pillar volume -->
+      <div class="chart-box">
+        <h3>Keywords by Pillar</h3>
+        <div class="canvas-wrap"><canvas id="chartPillar"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>Search Volume by Pillar</h3>
+        <div class="canvas-wrap"><canvas id="chartPillarVol"></canvas></div>
+      </div>
+      <!-- Row 3: KW Type | Scatter -->
+      <div class="chart-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <h3 style="margin-bottom:0" id="chartTypeTitle">KW Type — # of Keywords</h3>
+          <select id="kwTypeMetric" onchange="renderKWTypeChart()" style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:3px 8px;cursor:pointer;outline:none;">
+            <option value="count">Nº of Keywords</option>
+            <option value="volume">Search Volume</option>
+            <option value="competition">Avg Competition</option>
+            <option value="overall">Avg Overall</option>
+          </select>
+        </div>
+        <div class="canvas-wrap"><canvas id="chartType"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>Volume vs Competition &nbsp;<span style="color:var(--muted);font-weight:400;text-transform:none">· bubble = Overall Score · right = less competitive</span></h3>
+        <div class="canvas-wrap"><canvas id="chartScatter"></canvas></div>
+      </div>
+    </div>
+
+    <div class="pagination" id="pagination">
+      <span class="page-info" id="pageInfo"></span>
+      <div class="page-btns" id="pageBtns"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let RAW = [];
+
+// ── CSV loader ────────────────────────────────────────────────────────────────
+function onDataLoaded(text, filename) {
+  RAW = parseCSV(text);
+  initDashboard();
+  document.getElementById('totalCount').textContent = RAW.length.toLocaleString() + ' keywords';
+  document.getElementById('csvLabel').innerHTML = '🔄 Reload<input type="file" accept=".csv" style="display:none" onchange="loadCSV(this.files[0])">';
+  document.getElementById('csvStatus').textContent = '✓ ' + (filename || '00_consolidated_keywords.csv');
+  document.getElementById('csvStatus').style.color = 'var(--accent3)';
+}
+
+function loadCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => onDataLoaded(e.target.result, file.name);
+  reader.readAsText(file, 'utf-8');
+}
+
+function autoLoad() {
+  const status = document.getElementById('csvStatus');
+  status.textContent = 'Loading…';
+  status.style.color = 'var(--muted)';
+  fetch('./00_consolidated_keywords.csv')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => onDataLoaded(text, '00_consolidated_keywords.csv'))
+    .catch(() => {
+      status.textContent = '⚠ Auto-load unavailable — use Reload button';
+      status.style.color = 'var(--accent4)';
+    });
+}
+
+window.addEventListener('DOMContentLoaded', autoLoad);
+
+function parseCSV(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const header = splitCSVLine(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = splitCSVLine(lines[i]);
+    const obj = {};
+    header.forEach((h, idx) => {
+      const v = vals[idx] !== undefined ? vals[idx].trim() : '';
+      const stripped = v.replace(/^"|"$/g, '');
+      const num = Number(stripped);
+      obj[h.trim().replace(/^\uFEFF/, '')] = stripped === '' ? null : (isNaN(num) ? stripped : num);
+    });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+
+// State
+let filtered = [...RAW];
+let sortCol = 'Search volume';
+let sortDir = -1; // -1 = desc
+let currentPage = 1;
+const PAGE_SIZE = 50;
+let chartInstances = {};
+let activePillar = null;
+
+// Topic list
+const topics = [...new Set(RAW.map(d => d['Main Topic']))].sort();
+const topicContainer = document.getElementById('topicFilters');
+topics.forEach(t => {
+  topicContainer.innerHTML += `<label class="checkbox-item"><input type="checkbox" value="${t}" checked onchange="applyFilters()"><span>${t}</span></label>`;
+});
+
+// Init counts
+function updatePillarCounts(data) {
+  const pillars = {'Emotional Pain':'ep','Personal Growth':'pg','Purpose and Identity':'pi','Fundamental Knowledge':'fk'};
+  Object.entries(pillars).forEach(([name, cls]) => {
+    const count = data.filter(d => d['Content Pillar'] === name).length;
+    document.getElementById('cnt-' + cls).textContent = count.toLocaleString();
+  });
+}
+
+function fmtNum(n) {
+  if (n == null) return '—';
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(0) + 'K';
+  return n.toLocaleString();
+}
+
+function getPillarClass(p) {
+  return {
+    'Emotional Pain': 'pill-ep',
+    'Personal Growth': 'pill-pg',
+    'Purpose and Identity': 'pill-pi',
+    'Fundamental Knowledge': 'pill-fk'
+  }[p] || '';
+}
+
+function getTypeClass(t) {
+  return {'single word':'type-single','multiple words':'type-multiple','sentence':'type-sentence'}[t] || '';
+}
+
+function getBarColor(val, max, invert=false) {
+  const pct = val / max;
+  if (invert) {
+    if (pct < 0.33) return '#43d9a3';
+    if (pct < 0.66) return '#f7c948';
+    return '#ff6584';
+  } else {
+    if (pct > 0.66) return '#43d9a3';
+    if (pct > 0.33) return '#f7c948';
+    return '#ff6584';
+  }
+}
+
+function togglePillar(pillar) {
+  if (activePillar === pillar) {
+    activePillar = null;
+    document.querySelectorAll('.pillar-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('#pillarFilters input').forEach(cb => { cb.checked = true; });
+  } else {
+    activePillar = pillar;
+    document.querySelectorAll('.pillar-card').forEach(c => c.classList.remove('active'));
+    const cls = {'Emotional Pain':'ep','Personal Growth':'pg','Purpose and Identity':'pi','Fundamental Knowledge':'fk'}[pillar];
+    document.getElementById('card-' + cls).classList.add('active');
+    document.querySelectorAll('#pillarFilters input').forEach(cb => {
+      cb.checked = (cb.value === pillar);
+    });
+  }
+  applyFilters();
+}
+
+function updateRange(id, valId) {
+  const val = +document.getElementById(id).value;
+  const el = document.getElementById(valId);
+  if (id === 'svMin' || id === 'svMax') el.textContent = fmtNum(val);
+  else el.textContent = val.toFixed(0);
+}
+
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const pillars = [...document.querySelectorAll('#pillarFilters input:checked')].map(i => i.value);
+  const types = [...document.querySelectorAll('.filters .checkbox-list:nth-child(3) input:checked, .filters .checkbox-item input[value="single word"], .filters .checkbox-item input[value="multiple words"], .filters .checkbox-item input[value="sentence"]')].filter(i => i.checked && ['single word','multiple words','sentence'].includes(i.value)).map(i => i.value);
+  const selectedTopics = [...document.querySelectorAll('#topicFilters input:checked')].map(i => i.value);
+  const svMin = +document.getElementById('svMin').value;
+  const svMax = +document.getElementById('svMax').value;
+  const compMax = +document.getElementById('compMax').value;
+  const overallMin = +document.getElementById('overallMin').value;
+
+  filtered = RAW.filter(d => {
+    if (search && !d.Keyword.toLowerCase().includes(search)) return false;
+    if (!pillars.includes(d['Content Pillar'])) return false;
+    if (!types.includes(d['KW Type'])) return false;
+    if (!selectedTopics.includes(d['Main Topic'])) return false;
+    const sv = +(d['Search volume']) || 0;
+    if (sv < svMin || sv > svMax) return false;
+    if (d['Competition'] != null && d['Competition'] > compMax) return false;
+    if (d['Overall'] != null && d['Overall'] < overallMin) return false;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    const av = a[sortCol], bv = b[sortCol];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+
+  currentPage = 1;
+  updateStats();
+  renderTable();
+  updatePillarCounts(filtered);
+  document.getElementById('totalCount').textContent = filtered.length.toLocaleString() + ' keywords';
+  if (document.getElementById('chartsView').classList.contains('visible')) renderCharts();
+}
+
+function updateStats() {
+  const total = filtered.length;
+  document.getElementById('showingCount').textContent = total.toLocaleString();
+  if (total === 0) {
+    document.getElementById('avgVol').textContent = '—';
+    document.getElementById('avgComp').textContent = '—';
+    document.getElementById('avgOverall').textContent = '—';
+    document.getElementById('sweetCount').textContent = '0 gems';
+    return;
+  }
+  const sumVol  = filtered.reduce((s, d) => s + (+(d['Search volume'])  || 0), 0);
+  const sumComp = filtered.reduce((s, d) => s + (+(d['Competition'])    || 0), 0);
+  const sumOvr  = filtered.reduce((s, d) => s + (+(d['Overall'])        || 0), 0);
+  document.getElementById('avgVol').textContent     = fmtNum(Math.round(sumVol  / total));
+  document.getElementById('avgComp').textContent    = (sumComp / total).toFixed(1);
+  document.getElementById('avgOverall').textContent = (sumOvr  / total).toFixed(1);
+  const sweet = filtered.filter(d => (+(d['Search volume'])||0) > 50000 && (+(d['Competition'])||999) < 50 && (+(d['Overall'])||0) > 55);
+  document.getElementById('sweetCount').textContent = sweet.length + ' gems';
+}
+
+function renderTable() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = filtered.slice(start, start + PAGE_SIZE);
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyMsg');
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('pagination').style.display = 'flex';
+
+  tbody.innerHTML = page.map(d => {
+    const sv = d['Search volume'];
+    const comp = d['Competition'];
+    const ovr = d['Overall'];
+    const ago = d['30d ago searches'];
+    const isSweet = sv > 50000 && comp < 50 && ovr > 55;
+
+    let trend = '';
+    if (sv != null && ago != null) {
+      const diff = sv - ago;
+      const pct = ago > 0 ? ((diff/ago)*100).toFixed(0) : 0;
+      if (diff > 0) trend = `<span class="trend-up">▲ ${Math.abs(pct)}%</span>`;
+      else if (diff < 0) trend = `<span class="trend-down">▼ ${Math.abs(pct)}%</span>`;
+      else trend = `<span class="trend-neutral">—</span>`;
+    }
+
+    return `<tr${isSweet ? ' style="background:rgba(67,217,163,.05)"' : ''}>
+      <td><span class="kw-text">${isSweet ? '🎯 ' : ''}${d.Keyword}</span></td>
+      <td><span class="${getPillarClass(d['Content Pillar'])}">${d['Content Pillar']}</span></td>
+      <td><span class="topic-badge">${d['Main Topic']}</span></td>
+      <td><span class="type-badge ${getTypeClass(d['KW Type'])}">${d['KW Type']}</span></td>
+      <td><span class="sv-val">${fmtNum(sv)}</span></td>
+      <td>
+        <div class="score-bar">
+          <div class="bar-bg"><div class="bar-fill" style="width:${comp != null ? comp : 0}%;background:${getBarColor(comp||0, 100, true)}"></div></div>
+          <span class="score-num">${comp != null ? comp.toFixed(0) : '—'}</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-bar">
+          <div class="bar-bg"><div class="bar-fill" style="width:${ovr != null ? (ovr/76*100) : 0}%;background:${getBarColor(ovr||0, 76)}"></div></div>
+          <span class="score-num">${ovr != null ? ovr.toFixed(0) : '—'}</span>
+        </div>
+      </td>
+      <td>${trend}</td>
+    </tr>`;
+  }).join('');
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  const start = (currentPage-1)*PAGE_SIZE+1;
+  const end = Math.min(currentPage*PAGE_SIZE, filtered.length);
+  document.getElementById('pageInfo').textContent = `${start}–${end} of ${filtered.length.toLocaleString()}`;
+
+  const btns = document.getElementById('pageBtns');
+  let html = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let i = Math.max(1, currentPage-2); i <= Math.min(total, currentPage+2); i++) {
+    html += `<button class="page-btn${i===currentPage?' active':''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>›</button>`;
+  btns.innerHTML = html;
+}
+
+function goPage(n) {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  if (n < 1 || n > total) return;
+  currentPage = n;
+  renderTable();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = col === 'Competition' ? 1 : -1; }
+  document.querySelectorAll('th').forEach(th => {
+    th.classList.remove('sorted');
+    th.querySelector('.sort-icon') && (th.querySelector('.sort-icon').textContent = '↕');
+  });
+  const th = document.getElementById('th-' + col);
+  if (th) {
+    th.classList.add('sorted');
+    th.innerHTML = col + ` <span class="sort-icon">${sortDir === -1 ? '↓' : '↑'}</span>`;
+  }
+  applyFilters();
+}
+
+function showTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tableView').style.display = tab === 'table' ? 'block' : 'none';
+  document.getElementById('pagination').style.display = tab === 'table' ? 'flex' : 'none';
+  const cv = document.getElementById('chartsView');
+  if (tab === 'charts') {
+    cv.classList.add('visible');
+    renderCharts();
+  } else {
+    cv.classList.remove('visible');
+  }
+}
+
+function renderKWTypeChart() {
+  const metric = (document.getElementById('kwTypeMetric') || {value:'count'}).value;
+  const types = ['single word', 'multiple words', 'sentence'];
+  const labels = ['Single Word', 'Multiple Words', 'Sentence'];
+  const colors = { bg: ['rgba(108,99,255,.7)','rgba(67,217,163,.7)','rgba(247,201,72,.7)'], border: ['#6c63ff','#43d9a3','#f7c948'] };
+
+  const grouped = {};
+  types.forEach(t => grouped[t] = []);
+  filtered.forEach(d => { if (grouped[d['KW Type']]) grouped[d['KW Type']].push(d); });
+
+  let data, yLabel, tooltipFmt;
+  const titles = { count:'Nº of Keywords', volume:'Search Volume', competition:'Avg Competition', overall:'Avg Overall' };
+  document.getElementById('chartTypeTitle').textContent = `KW Type — ${titles[metric]}`;
+
+  if (metric === 'count') {
+    data = types.map(t => grouped[t].length);
+    yLabel = 'Keywords';
+    tooltipFmt = v => v.toLocaleString() + ' keywords';
+  } else if (metric === 'volume') {
+    data = types.map(t => grouped[t].reduce((s,d) => s + (+(d['Search volume'])||0), 0));
+    yLabel = 'Search Volume';
+    tooltipFmt = v => fmtNum(v);
+  } else if (metric === 'competition') {
+    data = types.map(t => { const r = grouped[t].filter(d => d['Competition']!=null); return r.length ? r.reduce((s,d) => s+(+d['Competition']),0)/r.length : 0; });
+    yLabel = 'Avg Competition';
+    tooltipFmt = v => v.toFixed(1);
+  } else {
+    data = types.map(t => { const r = grouped[t].filter(d => d['Overall']!=null); return r.length ? r.reduce((s,d) => s+(+d['Overall']),0)/r.length : 0; });
+    yLabel = 'Avg Overall Score';
+    tooltipFmt = v => v.toFixed(1);
+  }
+
+  if (chartInstances.type) { try { chartInstances.type.destroy(); } catch(e){} }
+  chartInstances.type = new Chart(document.getElementById('chartType'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 6 }]
+    },
+    options: {
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => tooltipFmt(ctx.parsed.y) } } },
+      scales: {
+        x: { ticks:{ color:'#7b82a0' }, grid:{ display:false } },
+        y: { title:{ display:true, text:yLabel, color:'#7b82a0', font:{size:10} }, ticks:{ color:'#7b82a0', callback: v => metric==='volume' ? fmtNum(v) : v }, grid:{ color:'#2e3250' } }
+      },
+      responsive:true, maintainAspectRatio:false, animation:{duration:300}
+    }
+  });
+}
+
+function renderCharts() {
+  Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
+  chartInstances = {};
+
+  const pillarColors = {
+    'Emotional Pain': '#ff6584',
+    'Personal Growth': '#43d9a3',
+    'Purpose and Identity': '#f7c948',
+    'Fundamental Knowledge': '#6c63ff'
+  };
+
+  // Top 15 by volume
+  const top15 = filtered.filter(d => d['Search volume']).sort((a,b) => b['Search volume'] - a['Search volume']).slice(0,15);
+  chartInstances.vol = new Chart(document.getElementById('chartVolume'), {
+    type: 'bar',
+    data: {
+      labels: top15.map(d => d.Keyword.length > 22 ? d.Keyword.slice(0,22)+'…' : d.Keyword),
+      datasets: [{ data: top15.map(d => d['Search volume']), backgroundColor: top15.map(d => pillarColors[d['Content Pillar']] + 'cc'), borderColor: top15.map(d => pillarColors[d['Content Pillar']]), borderWidth: 1, borderRadius: 4 }]
+    },
+    options: { indexAxis:'y', plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{ color:'#7b82a0', callback: v => fmtNum(v) }, grid:{ color:'#2e3250' } }, y:{ ticks:{ color:'#e8eaf0', font:{size:11} }, grid:{ display:false } } }, responsive:true, maintainAspectRatio:false, animation:{duration:300} }
+  });
+
+  // Top 15 lowest competition
+  const top15comp = filtered.filter(d => d['Competition'] != null && +(d['Competition']) > 0).sort((a,b) => a['Competition'] - b['Competition']).slice(0,15);
+  chartInstances.lowComp = new Chart(document.getElementById('chartLowComp'), {
+    type: 'bar',
+    data: {
+      labels: top15comp.map(d => d.Keyword.length > 22 ? d.Keyword.slice(0,22)+'…' : d.Keyword),
+      datasets: [{ data: top15comp.map(d => +(+d['Competition']).toFixed(2)), backgroundColor: top15comp.map(d => pillarColors[d['Content Pillar']] + 'cc'), borderColor: top15comp.map(d => pillarColors[d['Content Pillar']]), borderWidth: 1, borderRadius: 4 }]
+    },
+    options: { indexAxis:'y', plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => `Competition: ${ctx.parsed.x.toFixed(2)}  |  ${top15comp[ctx.dataIndex]['Search volume'] ? 'Vol: ' + fmtNum(top15comp[ctx.dataIndex]['Search volume']) : ''}` } } }, scales:{ x:{ min:0, max: Math.ceil(Math.max(...top15comp.map(d => +d['Competition'])) * 1.1), ticks:{ color:'#7b82a0', callback: v => v.toFixed(1) }, grid:{ color:'#2e3250' } }, y:{ ticks:{ color:'#e8eaf0', font:{size:11} }, grid:{ display:false } } }, responsive:true, maintainAspectRatio:false, animation:{duration:300} }
+  });
+
+  // Pillar distribution
+  const pCounts = {}; const pVolume = {};
+  filtered.forEach(d => {
+    const p = d['Content Pillar'];
+    pCounts[p]  = (pCounts[p]  || 0) + 1;
+    pVolume[p]  = (pVolume[p]  || 0) + (+(d['Search volume']) || 0);
+  });
+  const pillarLabels = Object.keys(pCounts);
+  const doughnutOpts = (extraTooltip) => ({
+    plugins: {
+      legend: { position:'bottom', labels:{ color:'#7b82a0', font:{size:11}, padding:10 } },
+      tooltip: { callbacks: { label: extraTooltip } }
+    },
+    responsive: true, maintainAspectRatio: false, animation: {duration:300}
+  });
+  chartInstances.pillar = new Chart(document.getElementById('chartPillar'), {
+    type: 'doughnut',
+    data: {
+      labels: pillarLabels,
+      datasets: [{ data: pillarLabels.map(k => pCounts[k]), backgroundColor: pillarLabels.map(k => pillarColors[k] + 'cc'), borderColor: pillarLabels.map(k => pillarColors[k]), borderWidth: 2 }]
+    },
+    options: doughnutOpts(ctx => `${ctx.label}: ${ctx.parsed.toLocaleString()} keywords (${((ctx.parsed / filtered.length)*100).toFixed(1)}%)`)
+  });
+  chartInstances.pillarVol = new Chart(document.getElementById('chartPillarVol'), {
+    type: 'doughnut',
+    data: {
+      labels: pillarLabels,
+      datasets: [{ data: pillarLabels.map(k => pVolume[k]), backgroundColor: pillarLabels.map(k => pillarColors[k] + 'cc'), borderColor: pillarLabels.map(k => pillarColors[k]), borderWidth: 2 }]
+    },
+    options: doughnutOpts(ctx => {
+      const total = pillarLabels.reduce((s,k) => s + pVolume[k], 0);
+      return `${ctx.label}: ${fmtNum(ctx.parsed)} (${((ctx.parsed/total)*100).toFixed(1)}%)`;
+    })
+  });
+
+  // KW Type
+  renderKWTypeChart();
+
+  // Scatter: Competition vs Overall
+  const scatterData = filtered.filter(d => d['Competition'] != null && d['Overall'] != null && d['Search volume'] != null).map(d => ({
+    x: +(100 - d['Competition']).toFixed(1),   // inverted: right = low competition
+    y: d['Search volume'],
+    r: Math.max(3, Math.min(20, (d['Overall'] / 76) * 18 + 3)),  // bubble = Overall Score
+    label: d.Keyword, pillar: d['Content Pillar'],
+    comp: d['Competition'], overall: d['Overall'], sv: d['Search volume']
+  }));
+  const pillarOrder = ['Emotional Pain','Personal Growth','Purpose and Identity','Fundamental Knowledge'];
+  chartInstances.scatter = new Chart(document.getElementById('chartScatter'), {
+    type: 'bubble',
+    data: {
+      datasets: pillarOrder.map(p => ({
+        label: p,
+        data: scatterData.filter(d => d.pillar === p),
+        backgroundColor: pillarColors[p] + '80',
+        borderColor: pillarColors[p],
+        borderWidth: 1
+      }))
+    },
+    options: {
+      plugins: {
+        legend: { position:'bottom', labels:{ color:'#7b82a0', font:{size:11}, padding:10 } },
+        tooltip: { callbacks: { label: ctx => {
+          const d = ctx.raw;
+          return [`${d.label}`, `Vol: ${fmtNum(d.sv)}  |  Comp: ${d.comp}  |  Overall: ${d.overall}`];
+        }}}
+      },
+      scales: {
+        x: {
+          min: 0, max: 100,
+          title:{ display:true, text:'← More competitive        Less competitive →', color:'#7b82a0', font:{size:11} },
+          ticks:{ color:'#7b82a0', callback: v => 100 - v },
+          grid:{ color:'#2e3250' }
+        },
+        y: {
+          title:{ display:true, text:'Search Volume', color:'#7b82a0', font:{size:11} },
+          ticks:{ color:'#7b82a0', callback: v => fmtNum(v) },
+          grid:{ color:'#2e3250' }
+        }
+      },
+      responsive:true, maintainAspectRatio:false, animation:{duration:300}
+    }
+  });
+}
+
+function resetFilters() {
+  document.getElementById('searchInput').value = '';
+  document.querySelectorAll('.filters input[type="checkbox"]').forEach(cb => cb.checked = true);
+  document.getElementById('svMin').value = 0;
+  document.getElementById('svMax').value = 4088093;
+  document.getElementById('compMax').value = 100;
+  document.getElementById('overallMin').value = 0;
+  updateRange('svMin','svMinVal');
+  updateRange('svMax','svMaxVal');
+  updateRange('compMax','compMaxVal');
+  updateRange('overallMin','overallMinVal');
+  activePillar = null;
+  document.querySelectorAll('.pillar-card').forEach(c => c.classList.remove('active'));
+  applyFilters();
+}
+
+// Init
+function initDashboard() {
+  activePillar = null;
+  currentPage  = 1;
+  sortCol      = 'Search volume';
+  sortDir      = -1;
+  // Rebuild topic checkboxes from new data
+  const topicContainer = document.getElementById('topicFilters');
+  const topics = [...new Set(RAW.map(d => d['Main Topic']))].sort();
+  topicContainer.innerHTML = '';
+  topics.forEach(t => {
+    topicContainer.innerHTML += `<label class="checkbox-item"><input type="checkbox" value="${t}" checked onchange="applyFilters()"><span>${t}</span></label>`;
+  });
+  resetFilters();
+}
+</script>
+</div><!-- mainUI -->
+</body>
+</html>
